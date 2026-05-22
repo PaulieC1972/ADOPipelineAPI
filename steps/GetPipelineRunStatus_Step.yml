@@ -1,0 +1,42 @@
+# =============================================================================
+# steps/GetPipelineRunStatus_Step.yml
+# Template to check the status of a pipeline run
+# =============================================================================
+
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: pipelineId
+  type: string
+- name: runId
+  type: string
+- name: stepName
+  type: string
+  default: 'GetPipelineRunStatus_Step'
+
+steps:
+
+- pwsh: |
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    $status = Get-PipelineRunStatus `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -PipelineId ${{ parameters.pipelineId }} `
+      -RunId ${{ parameters.runId }} `
+      -AccessToken $env:SYSTEM_ACCESSTOKEN
+
+    Set-PipelineVariable -Name "State" -Value $status.State -IsOutput
+    Set-PipelineVariable -Name "Result" -Value $status.Result -IsOutput
+    Set-PipelineVariable -Name "RunId" -Value "${{ parameters.runId }}" -IsOutput
+    Set-PipelineVariable -Name "Url" -Value $status.Url -IsOutput
+
+    Write-Host "Pipeline ${{ parameters.pipelineId }} run ${{ parameters.runId }}: State=$($status.State) Result=$($status.Result)"
+  displayName: 'Get pipeline run status: ${{ parameters.pipelineId }}/${{ parameters.runId }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

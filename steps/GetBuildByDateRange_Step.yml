@@ -1,0 +1,72 @@
+# =============================================================================
+# steps/GetBuildByDateRange_Step.yml
+# Template to get builds within a date range and set pipeline variables
+# =============================================================================
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: definitionId
+  type: number
+- name: daysBack
+  type: number
+  default: 7
+- name: stepName
+  type: string
+  default: 'GetBuildsByDateRange_Step'
+
+steps:
+- pwsh: |
+    # Import the central module
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    # Calculate date range
+    $maxTime = Get-Date
+    $minTime = $maxTime.AddDays(-${{ parameters.daysBack }})
+
+    Write-Host "Getting builds from $minTime to $maxTime"
+
+    # Get builds
+    $builds = Get-BuildsByDateRange `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -DefinitionId ${{ parameters.definitionId }} `
+      -MinTime $minTime `
+      -MaxTime $maxTime
+
+    if ($builds.Count -eq 0) {
+        Write-Warning "No builds found in the specified date range"
+        Set-PipelineVariable -Name "BuildCount" -Value "0" -IsOutput
+        Set-PipelineVariable -Name "BuildIds" -Value "" -IsOutput
+        Set-PipelineVariable -Name "SuccessfulBuilds" -Value "0" -IsOutput
+        Set-PipelineVariable -Name "FailedBuilds" -Value "0" -IsOutput
+        exit 0
+    }
+
+    # Calculate statistics
+    $buildIds = ($builds | ForEach-Object { $_.Id }) -join ","
+    $successfulBuilds = ($builds | Where-Object { $_.Result -eq "succeeded" }).Count
+    $failedBuilds = ($builds | Where-Object { $_.Result -eq "failed" }).Count
+    $partialBuilds = ($builds | Where-Object { $_.Result -eq "partiallySucceeded" }).Count
+
+    # Set pipeline variables
+    Set-PipelineVariable -Name "BuildCount" -Value $builds.Count -IsOutput
+    Set-PipelineVariable -Name "BuildIds" -Value $buildIds -IsOutput
+    Set-PipelineVariable -Name "SuccessfulBuilds" -Value $successfulBuilds -IsOutput
+    Set-PipelineVariable -Name "FailedBuilds" -Value $failedBuilds -IsOutput
+    Set-PipelineVariable -Name "PartialBuilds" -Value $partialBuilds -IsOutput
+
+    # Also set as regular variables
+    Write-Host "##vso[task.setvariable variable=BuildCount]$($builds.Count)"
+    Write-Host "##vso[task.setvariable variable=SuccessfulBuilds]$successfulBuilds"
+    Write-Host "##vso[task.setvariable variable=FailedBuilds]$failedBuilds"
+
+    Write-Host "Found $($builds.Count) build(s) in the last ${{ parameters.daysBack }} days"
+    Write-Host "Successful: $successfulBuilds, Failed: $failedBuilds, Partial: $partialBuilds"
+  displayName: 'Get Builds from Last ${{ parameters.daysBack }} Days'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

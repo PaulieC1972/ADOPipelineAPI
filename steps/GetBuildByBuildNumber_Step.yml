@@ -1,0 +1,54 @@
+# =============================================================================
+# steps/GetBuildByBuildNumber_Step.yml
+# Template to get builds within a date range and set pipeline variables
+# =============================================================================
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: definitionId
+  type: number
+- name: buildNumber
+  type: string
+  default: ''
+- name: stepName
+  type: string
+  default: 'GetBuildByBuildNumber_Step'
+
+steps:
+- pwsh: |
+    # Import the central module
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    Write-Host "Getting builds with build number: ${{ parameters.buildNumber }}"
+
+    # Get builds
+    $builds = Get-BuildsByBuildNumber `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -DefinitionId ${{ parameters.definitionId }} `
+      -BuildNumber "${{ parameters.buildNumber }}"
+
+    if ($null -eq $builds) {
+        Write-Warning "No builds found for with buildNumber ${{ parameters.buildNumber }} and Definition ID ${{ parameters.definitionId }}."
+        Set-PipelineVariable -Name "BuildsByBuildNumber" -Value "" -IsOutput
+        Set-PipelineVariable -Name "BuildsByBuildNumber" -Value ""
+        exit 0
+    }
+
+    $buildVersionList = ($builds | Sort-Object DateStarted -Descending | ForEach-Object { "$($_.Id):$($_.BuildNumber):$($_.DefinitionId):$($_.SourceVersion)" }) -join ","
+
+    # Set pipeline variables
+    Set-PipelineVariable -Name "BuildsByBuildNumber" -Value $buildVersionList -IsOutput
+
+    # Also set as regular variables (for same stage use)
+    Set-PipelineVariable -Name "BuildsByBuildNumber" -Value $buildVersionList
+
+    Write-Host "All builds retrieved successfully"
+  displayName: 'Get Builds with Build Number ${{ parameters.buildNumber }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

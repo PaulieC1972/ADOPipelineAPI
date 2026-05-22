@@ -1,0 +1,76 @@
+# =============================================================================
+# steps/GetCommit_Step.yml
+# Template to get the latest successful build and set pipeline variables
+# =============================================================================
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: repository
+  type: string
+  default: 'MyRepo'
+- name: commitId
+  type: string
+- name: stepName
+  type: string
+  default: 'GetCommit_Step'
+
+steps:
+- pwsh: |
+    # Import the central module
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    # Get commit
+    $commit = Get-Commit `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -Repository "${{ parameters.repository }}" `
+      -CommitId ${{ parameters.commitId }}
+
+    if ($null -eq $commit) {
+        Write-Warning "No commit found"
+        Set-PipelineVariable -Name "CommitId" -Value "" -IsOutput
+        exit 0
+    }
+
+    # Set pipeline variables
+    Set-PipelineVariable -Name "CommitId" -Value $commit.Id -IsOutput
+    Set-PipelineVariable -Name "CommitComment" -Value $commit.Comment -IsOutput
+    Set-PipelineVariable -Name "AuthorName" -Value $commit.Author.Name -IsOutput
+    Set-PipelineVariable -Name "AuthorDate" -Value $commit.Author.Date -IsOutput
+    Set-PipelineVariable -Name "AuthorEmail" -Value $commit.Author.Email -IsOutput
+    Set-PipelineVariable -Name "AuthorDate" -Value $commit.Author.Date -IsOutput
+    Set-PipelineVariable -Name "CommitterDate" -Value $commit.Committer.Date -IsOutput
+    Set-PipelineVariable -Name "CommitterEmail" -Value $commit.Committer.Email -IsOutput
+    Set-PipelineVariable -Name "CommitterDate" -Value $commit.Committer.Date -IsOutput
+    Set-PipelineVariable -Name "PushId" -Value $commit.Push.Id -IsOutput
+    Set-PipelineVariable -Name "PushDate" -Value $commit.Push.Date -IsOutput
+    Set-PipelineVariable -Name "PushedById" -Value $commit.Push.PushedById -IsOutput
+    Set-PipelineVariable -Name "PushedByUniqueName" -Value $commit.Push.PushedByUniqueName -IsOutput
+    Set-PipelineVariable -Name "PushedByDisplayName" -Value $commit.Push.PushedByDisplayName -IsOutput
+
+    # Also set as regular variables (for same job use)
+    Set-PipelineVariable -Name "CommitId" -Value $commit.Id
+    Set-PipelineVariable -Name "CommitComment" -Value $commit.Comment
+    Set-PipelineVariable -Name "AuthorName" -Value $commit.Author.Name
+    Set-PipelineVariable -Name "AuthorDate" -Value $commit.Author.Date
+    Set-PipelineVariable -Name "AuthorEmail" -Value $commit.Author.Email
+    Set-PipelineVariable -Name "AuthorDate" -Value $commit.Author.Date
+    Set-PipelineVariable -Name "CommitterDate" -Value $commit.Committer.Date
+    Set-PipelineVariable -Name "CommitterEmail" -Value $commit.Committer.Email
+    Set-PipelineVariable -Name "CommitterDate" -Value $commit.Committer.Date
+    Set-PipelineVariable -Name "PushId" -Value $commit.Push.Id
+    Set-PipelineVariable -Name "PushDate" -Value $commit.Push.Date
+    Set-PipelineVariable -Name "PushedById" -Value $commit.Push.PushedById
+    Set-PipelineVariable -Name "PushedByUniqueName" -Value $commit.Push.PushedByUniqueName
+    Set-PipelineVariable -Name "PushedByDisplayName" -Value $commit.Push.PushedByDisplayName
+
+    Write-Host "Commit data retrieved successfully"
+    Write-Host "Commit: $($commit.Id)"
+  displayName: 'Get Commit Data for ${{ parameters.commitId }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

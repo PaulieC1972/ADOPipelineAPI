@@ -1,0 +1,51 @@
+# =============================================================================
+# stes/GetBuildWorkitems.yml
+# Template to get work items from a build and set pipeline variables
+# =============================================================================
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: buildId
+  type: number
+- name: stepName
+  type: string
+  default: 'GetBuildWorkItems_Step'
+
+steps:
+- pwsh: |
+    # Import the central module
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    # Get build work items
+    $workItems = Get-BuildWorkItems `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -BuildId ${{ parameters.buildId }}
+
+    if ($workItems.Count -eq 0) {
+        Write-Warning "No work items found for build ${{ parameters.buildId }}"
+        Set-PipelineVariable -Name "WorkItemCount" -Value "0" -IsOutput
+        Set-PipelineVariable -Name "WorkItemIds" -Value "" -IsOutput
+        exit 0
+    }
+
+    # Prepare work item data
+    $workItemIds = ($workItems | ForEach-Object { $_.Id }) -join ","
+
+    # Set pipeline variables
+    Set-PipelineVariable -Name "WorkItemCount" -Value $workItems.Count -IsOutput
+    Set-PipelineVariable -Name "WorkItemIds" -Value $workItemIds -IsOutput
+
+    # Also set as regular variables
+    Write-Host "##vso[task.setvariable variable=WorkItemCount]$($workItems.Count)"
+    Write-Host "##vso[task.setvariable variable=WorkItemIds]$workItemIds"
+
+    Write-Host "Found $($workItems.Count) work item(s): $workItemIds"
+  displayName: 'Get Work Items for Build ${{ parameters.buildId }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

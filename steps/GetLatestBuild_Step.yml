@@ -1,0 +1,60 @@
+# =============================================================================
+# steps/GetLatestBuild_Step.yml
+# Template to get the latest successful build and set pipeline variables
+# =============================================================================
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: definitionId
+  type: number
+- name: stepName
+  type: string
+  default: 'GetLatestBuild_Step'
+
+steps:
+- pwsh: |
+    # Import the central module
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    # Get latest successful build
+    $build = Get-LatestSuccessfulBuild `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -DefinitionId ${{ parameters.definitionId }}
+
+    if ($null -eq $build) {
+        Write-Warning "No successful build found"
+        Set-PipelineVariable -Name "LatestBuildId" -Value "" -IsOutput
+        Set-PipelineVariable -Name "LatestBuildNumber" -Value "" -IsOutput
+        Set-PipelineVariable -Name "LatestBuildBranch" -Value "" -IsOutput
+        Set-PipelineVariable -Name "LatestBuildCommit" -Value "" -IsOutput
+        Set-PipelineVariable -Name "LatestBuildUrl" -Value "" -IsOutput
+        exit 0
+    }
+
+    # Set pipeline variables
+    Set-PipelineVariable -Name "LatestBuildId" -Value $build.Id -IsOutput
+    Set-PipelineVariable -Name "LatestBuildNumber" -Value $build.BuildNumber -IsOutput
+    Set-PipelineVariable -Name "LatestBuildBranch" -Value $build.SourceBranch -IsOutput
+    Set-PipelineVariable -Name "LatestBuildCommit" -Value $build.SourceVersion -IsOutput
+    Set-PipelineVariable -Name "LatestBuildUrl" -Value $build.Url -IsOutput
+    Set-PipelineVariable -Name "LatestBuildStatus" -Value $build.Status -IsOutput
+    Set-PipelineVariable -Name "LatestBuildResult" -Value $build.Result -IsOutput
+
+    # Also set as regular variables (for same stage use)
+    Write-Host "##vso[task.setvariable variable=LatestBuildId]$($build.Id)"
+    Write-Host "##vso[task.setvariable variable=LatestBuildNumber]$($build.BuildNumber)"
+    Write-Host "##vso[task.setvariable variable=LatestBuildBranch]$($build.SourceBranch)"
+
+    Write-Host "Latest build retrieved successfully"
+    Write-Host "Build Number: $($build.BuildNumber)"
+    Write-Host "Build ID: $($build.Id)"
+    Write-Host "Branch: $($build.SourceBranch)"
+  displayName: 'Get Latest Successful Build for Definition ${{ parameters.definitionId }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

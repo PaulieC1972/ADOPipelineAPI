@@ -1,0 +1,81 @@
+# =============================================================================
+# steps/InvokePipelineRun_Step.yml
+# Template to trigger a pipeline run and optionally wait for completion
+# =============================================================================
+
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: pipelineId
+  type: string
+- name: branch
+  type: string
+- name: templateParameters
+  type: string
+  default: ''
+- name: waitForCompletion
+  type: boolean
+  default: false
+- name: pollIntervalSeconds
+  type: string
+  default: '300'
+- name: stepName
+  type: string
+  default: 'InvokePipelineRun_Step'
+
+steps:
+
+- pwsh: |
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    # Parse template parameters if provided
+    $paramString = '${{ parameters.templateParameters }}'
+    $templateParams = @{}
+    if ($paramString -and $paramString.Trim()) {
+      $templateParams = $paramString | ConvertFrom-Json -AsHashtable
+    }
+
+    # Trigger the pipeline
+    $run = Invoke-PipelineRun `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -PipelineId ${{ parameters.pipelineId }} `
+      -Branch "${{ parameters.branch }}" `
+      -TemplateParameters $templateParams `
+      -AccessToken $env:SYSTEM_ACCESSTOKEN
+
+    Set-PipelineVariable -Name "RunId" -Value $run.RunId -IsOutput
+    Set-PipelineVariable -Name "RunUrl" -Value $run.Url -IsOutput
+  displayName: 'Trigger Pipeline ${{ parameters.pipelineId }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+- ${{ if eq(parameters.waitForCompletion, true) }}:
+  - pwsh: |
+      Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+      $runId = $(${{ parameters.stepName }}.RunId)
+
+      $result = Wait-PipelineRun `
+        -Organization "${{ parameters.organization }}" `
+        -Project "${{ parameters.project }}" `
+        -PipelineId ${{ parameters.pipelineId }} `
+        -RunId $runId `
+        -PollIntervalSeconds ${{ parameters.pollIntervalSeconds }} `
+        -AccessToken $env:SYSTEM_ACCESSTOKEN
+
+      Set-PipelineVariable -Name "State" -Value $result.State -IsOutput
+      Set-PipelineVariable -Name "Result" -Value $result.Result -IsOutput
+
+      if ($result.Result -ne 'succeeded') {
+        throw "Pipeline run $runId failed with result: $($result.Result)"
+      }
+    displayName: 'Wait for Pipeline ${{ parameters.pipelineId }}'
+    name: ${{ parameters.stepName }}_Wait
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)

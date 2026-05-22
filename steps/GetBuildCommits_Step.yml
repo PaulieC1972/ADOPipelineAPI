@@ -1,0 +1,63 @@
+# =============================================================================
+# steps/GetBuildCommits_Step.yml
+# Template to get commits from a build and set pipeline variables
+# =============================================================================
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: buildId
+  type: number
+- name: stepName
+  type: string
+  default: 'GetBuildCommits_Step'
+
+steps:
+- pwsh: |
+    # Import the central module
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    # Get build commits
+    $commits = Get-BuildCommits `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -BuildId ${{ parameters.buildId }}
+
+    if ($commits.Count -eq 0) {
+        Write-Warning "No commits found for build ${{ parameters.buildId }}"
+        Set-PipelineVariable -Name "CommitCount" -Value "0" -IsOutput
+        Set-PipelineVariable -Name "CommitIds" -Value "" -IsOutput
+        Set-PipelineVariable -Name "CommitMessages" -Value "" -IsOutput
+        exit 0
+    }
+
+    # Prepare commit data
+    $commitIds = ($commits | ForEach-Object { $_.Id }) -join ","
+    $commitMessages = ($commits | ForEach-Object { $_.Message.Replace("`n", " ").Replace("`r", "") }) -join " | "
+    $firstCommitId = $commits[0].Id
+    $firstCommitMessage = $commits[0].Message
+    $firstCommitAuthor = $commits[0].Author
+
+    # Set pipeline variables
+    Set-PipelineVariable -Name "CommitCount" -Value $commits.Count -IsOutput
+    Set-PipelineVariable -Name "CommitIds" -Value $commitIds -IsOutput
+    Set-PipelineVariable -Name "CommitMessages" -Value $commitMessages -IsOutput
+    Set-PipelineVariable -Name "FirstCommitId" -Value $firstCommitId -IsOutput
+    Set-PipelineVariable -Name "FirstCommitMessage" -Value $firstCommitMessage -IsOutput
+    Set-PipelineVariable -Name "FirstCommitAuthor" -Value $firstCommitAuthor -IsOutput
+
+    # Also set as regular variables
+    Write-Host "##vso[task.setvariable variable=CommitCount]$($commits.Count)"
+    Write-Host "##vso[task.setvariable variable=FirstCommitId]$firstCommitId"
+
+    Write-Host "Found $($commits.Count) commit(s)"
+    foreach ($commit in $commits) {
+        Write-Host "  - $($commit.Id): $($commit.Message) by $($commit.Author)"
+    }
+  displayName: 'Get Commits for Build ${{ parameters.buildId }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

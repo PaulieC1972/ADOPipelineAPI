@@ -1,0 +1,46 @@
+# =============================================================================
+# steps/GetRepoFileContent_Step.yml
+# Template to get a single file's content from an Azure DevOps Git repository
+# =============================================================================
+
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: repository
+  type: string
+- name: path
+  type: string
+- name: branch
+  type: string
+  default: 'main'
+- name: stepName
+  type: string
+  default: 'GetRepoFileContent_Step'
+
+steps:
+
+- pwsh: |
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    $content = Get-RepoFileContent `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -Repository "${{ parameters.repository }}" `
+      -Path "${{ parameters.path }}" `
+      -Branch "${{ parameters.branch }}" `
+      -AccessToken $env:SYSTEM_ACCESSTOKEN
+
+    # Store raw content as output variable
+    $contentStr = if ($content -is [string]) { $content } else { $content | ConvertTo-Json -Depth 10 -Compress }
+    Set-PipelineVariable -Name "Content" -Value $contentStr -IsOutput
+    Set-PipelineVariable -Name "Path" -Value "${{ parameters.path }}" -IsOutput
+
+    Write-Host "Retrieved file content from ${{ parameters.path }}"
+  displayName: 'Get File: ${{ parameters.path }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

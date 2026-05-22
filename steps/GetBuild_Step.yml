@@ -1,0 +1,68 @@
+# =============================================================================
+# steps/GetCommit_Step.yml
+# Template to get the latest successful build and set pipeline variables
+# =============================================================================
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: buildId
+  type: string
+- name: stepName
+  type: string
+  default: 'GetCommit_Step'
+
+steps:
+- pwsh: |
+    # Import the central module
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    # Get build
+    $build = Get-Build `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -BuildId ${{ parameters.buildId }}
+
+    if ($null -eq $build) {
+        Write-Warning "No build found"
+        Set-PipelineVariable -Name "BuildId" -Value "" -IsOutput
+        exit 0
+    }
+
+    # Set pipeline variables
+    Set-PipelineVariable -Name "BuildId" -Value $build.Id -IsOutput
+    Set-PipelineVariable -Name "BuildNumber" -Value $build.BuildNumber -IsOutput
+    Set-PipelineVariable -Name "Status" -Value $build.Status -IsOutput
+    Set-PipelineVariable -Name "Result" -Value $build.Result -IsOutput
+    Set-PipelineVariable -Name "QueueTime" -Value $build.QueueTime -IsOutput
+    Set-PipelineVariable -Name "StartTime" -Value $build.StartTime -IsOutput
+    Set-PipelineVariable -Name "FinishTime" -Value $build.FinishTime -IsOutput
+    Set-PipelineVariable -Name "SourceBranch" -Value $build.SourceBranch -IsOutput
+    Set-PipelineVariable -Name "SourceVersion" -Value $build.SourceVersion -IsOutput
+    Set-PipelineVariable -Name "DefinitionId" -Value $build.Definition.Id -IsOutput
+    Set-PipelineVariable -Name "DefinitionName" -Value $build.Definition.Name -IsOutput
+    Set-PipelineVariable -Name "Url" -Value $build.Url -IsOutput
+
+    # Also set as regular variables (for same job use)
+    Set-PipelineVariable -Name "BuildId" -Value $build.Id
+    Set-PipelineVariable -Name "BuildNumber" -Value $build.BuildNumber
+    Set-PipelineVariable -Name "Status" -Value $build.Status
+    Set-PipelineVariable -Name "Result" -Value $build.Result
+    Set-PipelineVariable -Name "QueueTime" -Value $build.QueueTime
+    Set-PipelineVariable -Name "StartTime" -Value $build.StartTime
+    Set-PipelineVariable -Name "FinishTime" -Value $build.FinishTime
+    Set-PipelineVariable -Name "SourceBranch" -Value $build.SourceBranch
+    Set-PipelineVariable -Name "SourceVersion" -Value $build.SourceVersion
+    Set-PipelineVariable -Name "DefinitionId" -Value $build.Definition.Id
+    Set-PipelineVariable -Name "DefinitionName" -Value $build.Definition.Name
+    Set-PipelineVariable -Name "Url" -Value $build.Url
+
+    Write-Host "Build data retrieved successfully"
+    Write-Host "Build: $($build.Id)"
+  displayName: 'Get Build Data'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

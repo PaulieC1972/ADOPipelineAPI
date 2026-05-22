@@ -1,0 +1,48 @@
+# =============================================================================
+# steps/GetBuildDefinition_Step.yml
+# Template to get build definition details and set pipeline variables
+# =============================================================================
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: definitionId
+  type: number
+- name: stepName
+  type: string
+  default: 'GetBuildDefinition_Step'
+
+steps:
+- pwsh: |
+    # Import the central module
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    # Get build definition
+    $definition = Get-BuildDefinition `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -DefinitionId ${{ parameters.definitionId }}
+
+    # Set pipeline variables
+    Set-PipelineVariable -Name "DefinitionName" -Value $definition.Name -IsOutput
+    Set-PipelineVariable -Name "DefinitionPath" -Value $definition.Path -IsOutput
+    Set-PipelineVariable -Name "DefinitionType" -Value $definition.Type -IsOutput
+    Set-PipelineVariable -Name "DefinitionQueueStatus" -Value $definition.QueueStatus -IsOutput
+    Set-PipelineVariable -Name "RepositoryType" -Value $definition.Repository.Type -IsOutput
+    Set-PipelineVariable -Name "RepositoryName" -Value $definition.Repository.Name -IsOutput
+    Set-PipelineVariable -Name "DefaultBranch" -Value $definition.Repository.DefaultBranch -IsOutput
+
+    # Also set as regular variables
+    Write-Host "##vso[task.setvariable variable=DefinitionName]$($definition.Name)"
+    Write-Host "##vso[task.setvariable variable=RepositoryName]$($definition.Repository.Name)"
+
+    Write-Host "Build Definition: $($definition.Name)"
+    Write-Host "Repository: $($definition.Repository.Name) ($($definition.Repository.Type))"
+    Write-Host "Default Branch: $($definition.Repository.DefaultBranch)"
+  displayName: 'Get Build Definition ${{ parameters.definitionId }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

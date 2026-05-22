@@ -1,0 +1,67 @@
+# =============================================================================
+# steps/GetLatestSuccessfulBuilds_Step.yml
+# Template to get the latest successful build and set pipeline variables
+# =============================================================================
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: definitionId
+  type: number
+- name: numberofbuilds
+  type: number
+  default: 5
+- name: includePartiallySucceeded
+  type: boolean
+  default: false
+- name: stepName
+  type: string
+  default: 'GetLatestSucccessfulBuilds_Step'
+- name: queryOrder
+  type: string
+  default: queueTimeDescending
+  values:
+  - finishTimeAscending
+  - finishTimeDescending
+  - queueTimeDescending
+  - queueTimeAscending
+  - startTimeDescending
+  - startTimeAscending
+
+steps:
+- pwsh: |
+    # Import the central module
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    # Get latest successful build
+    $builds = Get-LatestSuccessfulBuilds `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -DefinitionId ${{ parameters.definitionId }} `
+      -QueryOrder "${{ parameters.queryOrder }}" `
+      -Number ${{ parameters.numberofbuilds }} `
+      -IncludePartiallySucceeded ([bool]::Parse("${{ parameters.includePartiallySucceeded }}"))
+
+    if ($null -eq $builds) {
+        Write-Warning "No successful builds found for Definition ID ${{ parameters.definitionId }}."
+        Set-PipelineVariable -Name "LastestSuccessfulBuilds" -Value "" -IsOutput
+        Set-PipelineVariable -Name "LastestSuccessfulBuilds" -Value ""
+        exit 0
+    }
+
+    $buildVersionList = ($builds | Sort-Object QueueTime -Descending | ForEach-Object { "$($_.Id):$($_.BuildNumber):$($_.SourceVersion)" }) -join ","
+
+    # Set pipeline variables
+    Set-PipelineVariable -Name "LastestSuccessfulBuilds" -Value $buildVersionList -IsOutput
+
+    # Also set as regular variables (for same stage use)
+    Set-PipelineVariable -Name "LastestSuccessfulBuilds" -Value $buildVersionList
+
+    Write-Host "Latest builds retrieved successfully"
+  displayName: 'Get Latest Successful Builds for Definition ${{ parameters.definitionId }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

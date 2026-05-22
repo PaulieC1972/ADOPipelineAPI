@@ -1,0 +1,57 @@
+# =============================================================================
+# steps/GetPackagesetVersion_Step.yml
+# Template to get the current version of a package from a packageset
+# =============================================================================
+
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: repository
+  type: string
+  default: 'MyRepo'
+- name: packagesetPath
+  type: string
+- name: packageId
+  type: string
+- name: oldPackageId
+  type: string
+  default: ''
+- name: branch
+  type: string
+  default: 'main'
+- name: stepName
+  type: string
+  default: 'GetPackagesetVersion_Step'
+
+steps:
+
+- pwsh: |
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    $params = @{
+      Organization   = "${{ parameters.organization }}"
+      Project        = "${{ parameters.project }}"
+      Repository     = "${{ parameters.repository }}"
+      PackagesetPath = "${{ parameters.packagesetPath }}"
+      PackageId      = "${{ parameters.packageId }}"
+      Branch         = "${{ parameters.branch }}"
+      AccessToken    = $env:SYSTEM_ACCESSTOKEN
+    }
+
+    $oldId = '${{ parameters.oldPackageId }}'
+    if ($oldId) { $params.OldPackageId = $oldId }
+
+    $info = Get-PackagesetVersion @params
+
+    Set-PipelineVariable -Name "Version" -Value $info.Version -IsOutput
+    Set-PipelineVariable -Name "PackageId" -Value $info.PackageId -IsOutput
+
+    Write-Host "Current version: $($info.PackageId) $($info.Version)"
+  displayName: 'Get packageset version: ${{ parameters.packageId }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

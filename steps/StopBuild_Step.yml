@@ -1,0 +1,37 @@
+# =============================================================================
+# steps/StopBuild_Step.yml
+# Template to cancel the current running build
+# =============================================================================
+
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: buildId
+  type: string
+  default: '$(Build.BuildId)'
+- name: conditionVariable
+  type: string
+  default: ''
+- name: stepName
+  type: string
+  default: 'StopBuild_Step'
+
+steps:
+
+- pwsh: |
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    Stop-Build `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -BuildId ${{ parameters.buildId }} `
+      -AccessToken $env:SYSTEM_ACCESSTOKEN
+  displayName: 'Cancel build ${{ parameters.buildId }}'
+  name: ${{ parameters.stepName }}
+  condition: and(succeeded(), eq(variables['${{ parameters.conditionVariable }}'], 'True'))
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

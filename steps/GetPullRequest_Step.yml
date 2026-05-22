@@ -1,0 +1,84 @@
+---
+# =============================================================================
+# steps/GetPullRequest_Step.yml
+# Template to get pull request information and set pipeline variables
+# =============================================================================
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: repositoryId
+  type: string
+- name: pullRequestId
+  type: number
+- name: stepName
+  type: string
+  default: 'GetPullRequest_Step'
+
+steps:
+- pwsh: |
+    # Import the central module
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    # Get pull request
+    $pr = Get-PullRequest `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -RepositoryId "${{ parameters.repositoryId }}" `
+      -PullRequestId ${{ parameters.pullRequestId }}
+
+    if ($null -eq $pr) {
+        Write-Warning "No pull request found"
+        Set-PipelineVariable -Name "PullRequestId" -Value "" -IsOutput
+        exit 0
+    }
+
+    # Convert changed files array to comma-separated string
+    $changedFilesList = ""
+    if ($pr.ChangedFiles.Count -gt 0) {
+        $changedFilesList = $pr.ChangedFiles -join ","
+    }
+
+    # Set output pipeline variables (for cross-job use)
+    Set-PipelineVariable -Name "PullRequestId" -Value $pr.PullRequestId -IsOutput
+    Set-PipelineVariable -Name "Title" -Value $pr.Title -IsOutput
+    Set-PipelineVariable -Name "Description" -Value $pr.Description -IsOutput
+    Set-PipelineVariable -Name "Status" -Value $pr.Status -IsOutput
+    Set-PipelineVariable -Name "Author" -Value $pr.CreatedBy.DisplayName -IsOutput
+    Set-PipelineVariable -Name "AuthorEmail" -Value $pr.CreatedBy.UniqueName -IsOutput
+    Set-PipelineVariable -Name "AuthorId" -Value $pr.CreatedBy.Id -IsOutput
+    Set-PipelineVariable -Name "SourceBranch" -Value $pr.SourceBranch -IsOutput
+    Set-PipelineVariable -Name "TargetBranch" -Value $pr.TargetBranch -IsOutput
+    Set-PipelineVariable -Name "CreationDate" -Value $pr.CreationDate -IsOutput
+    Set-PipelineVariable -Name "FileCount" -Value $pr.FileCount -IsOutput
+    Set-PipelineVariable -Name "ChangedFiles" -Value $changedFilesList -IsOutput
+    Set-PipelineVariable -Name "Url" -Value $pr.Url -IsOutput
+
+    # Also set as regular variables (for same job use)
+    Set-PipelineVariable -Name "PullRequestId" `
+      -Value $pr.PullRequestId
+    Set-PipelineVariable -Name "Title" -Value $pr.Title
+    Set-PipelineVariable -Name "Description" -Value $pr.Description
+    Set-PipelineVariable -Name "Status" -Value $pr.Status
+    Set-PipelineVariable -Name "Author" -Value $pr.CreatedBy.DisplayName
+    Set-PipelineVariable -Name "AuthorEmail" -Value $pr.CreatedBy.UniqueName
+    Set-PipelineVariable -Name "AuthorId" -Value $pr.CreatedBy.Id
+    Set-PipelineVariable -Name "SourceBranch" -Value $pr.SourceBranch
+    Set-PipelineVariable -Name "TargetBranch" -Value $pr.TargetBranch
+    Set-PipelineVariable -Name "CreationDate" -Value $pr.CreationDate
+    Set-PipelineVariable -Name "FileCount" -Value $pr.FileCount
+    Set-PipelineVariable -Name "ChangedFiles" -Value $changedFilesList
+    Set-PipelineVariable -Name "Url" -Value $pr.Url
+
+    Write-Host "Pull request data retrieved successfully"
+    Write-Host "PR #$($pr.PullRequestId): $($pr.Title)"
+    Write-Host "Author: $($pr.CreatedBy.DisplayName)"
+    Write-Host "Files changed: $($pr.FileCount)"
+    Write-Host "Status: $($pr.Status)"
+  displayName: 'Get Pull Request ${{ parameters.pullRequestId }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

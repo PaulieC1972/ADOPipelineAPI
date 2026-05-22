@@ -1,0 +1,165 @@
+# =============================================================================
+# steps/CompareBranches_Step.yml
+# Template to compare two branches and set pipeline variables with commit details
+# =============================================================================
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: repository
+  type: string
+  default: 'MyRepo'
+- name: baseBranch
+  type: string
+  displayName: 'Base branch name (e.g., main or refs/heads/main)'
+- name: targetBranch
+  type: string
+  displayName: 'Target branch name to compare (e.g., feature/new-feature or refs/heads/feature/new-feature)'
+- name: itemPath
+  type: string
+  default: ''
+  displayName: 'Optional: Filter commits to a specific folder path (e.g., /src/mobile or /pipelines/Templates/1ES/OCM)'
+- name: includeFullComment
+  type: boolean
+  default: false
+  displayName: 'Fetch full commit comments (slower, makes individual API calls for each commit)'
+- name: outputEachCommit
+  type: boolean
+  default: false
+  displayName: 'Output details for each commit as separate variables (Commit0_*, Commit1_*, etc.) in addition to the aggregated list'
+- name: stepName
+  type: string
+  default: 'CompareBranches_Step'
+
+steps:
+- pwsh: |
+    # Import the central module
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+    # Validate required branch parameters
+    if ([string]::IsNullOrWhiteSpace($env:BASE_BRANCH)) {
+        Write-Error "BASE_BRANCH parameter is empty or not set. Please provide a valid base branch name (e.g., 'main' or 'refs/heads/main')."
+        exit 1
+    }
+    if ([string]::IsNullOrWhiteSpace($env:TARGET_BRANCH)) {
+        Write-Error "TARGET_BRANCH parameter is empty or not set. Please provide a valid target branch name (e.g., 'feature/my-feature' or 'refs/heads/feature/my-feature')."
+        exit 1
+    }
+    # Compare branches
+    $params = @{
+        Organization = "${{ parameters.organization }}"
+        Project = "${{ parameters.project }}"
+        RepositoryId = "${{ parameters.repository }}"
+        BaseBranch = $env:BASE_BRANCH
+        TargetBranch = $env:TARGET_BRANCH
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:ITEM_PATH)) {
+        $params['ItemPath'] = $env:ITEM_PATH
+    }
+
+    if ($env:INCLUDE_FULL_COMMENT -eq 'True') {
+        $params['IncludeFullComment'] = $true
+    }
+
+    $commits = Compare-Branches @params
+
+    if ($null -eq $commits -or $commits.Count -eq 0) {
+        Write-Host "No differences found between branches"
+        Set-PipelineVariable -Name "CommitCount" -Value "0" -IsOutput
+        Set-PipelineVariable -Name "CommitCount" -Value "0"
+        Set-PipelineVariable -Name "HasChanges" -Value "false" -IsOutput
+        Set-PipelineVariable -Name "HasChanges" -Value "false"
+        exit 0
+    }
+
+    Write-Host "Found $($commits.Count) commit(s) in target branch not in base branch"
+
+    # Set commit count
+    Set-PipelineVariable -Name "CommitCount" -Value $commits.Count.ToString() -IsOutput
+    Set-PipelineVariable -Name "CommitCount" -Value $commits.Count.ToString()
+    Set-PipelineVariable -Name "HasChanges" -Value "true" -IsOutput
+    Set-PipelineVariable -Name "HasChanges" -Value "true"
+
+    # Build comma/semicolon separated list: commitId,authorDate,comment;commitId,authorDate,comment;...
+    $commitDetailsList = @()
+    foreach ($commit in $commits) {
+        # Escape commas and semicolons in comment to prevent parsing issues
+        # Replace newlines with spaces and escape special characters
+        $escapedComment = $commit.Comment -replace "`r`n", ' ' -replace "`n", ' ' -replace ',', '[COMMA]' -replace ';', '[SEMICOLON]'
+        $commitDetails = "$($commit.CommitId),$($commit.Author.Date),$escapedComment"
+        $commitDetailsList += $commitDetails
+    }
+    $commitDetailsString = $commitDetailsList -join ';'
+
+    Write-Host "Setting CommitDetailsList variable with $($commits.Count) commits"
+    Set-PipelineVariable -Name "CommitDetailsList" -Value $commitDetailsString -IsOutput
+    Set-PipelineVariable -Name "CommitDetailsList" -Value $commitDetailsString
+    Write-Host "CommitDetailsList: $commitDetailsString"
+
+    # Set variables for each commit (indexed)
+    if ($env:OUTPUT_EACH_COMMIT -eq "true") {
+      Write-Host "Outputting details for each commit as separate variables"
+      $index = 0
+      foreach ($commit in $commits) {
+        $prefix = "Commit$index"
+
+        # Set output variables (for cross-job use)
+        Set-PipelineVariable -Name "${prefix}_CommitId" -Value $commit.CommitId -IsOutput
+        Set-PipelineVariable -Name "${prefix}_Comment" -Value $commit.Comment -IsOutput
+        Set-PipelineVariable -Name "${prefix}_Description" -Value $commit.Description -IsOutput
+        Set-PipelineVariable -Name "${prefix}_AuthorEmail" -Value $commit.Author.Email -IsOutput
+        Set-PipelineVariable -Name "${prefix}_Date" -Value $commit.Author.Date -IsOutput
+
+        # Set regular variables (for same-job use)
+        Set-PipelineVariable -Name "${prefix}_CommitId" -Value $commit.CommitId
+        Set-PipelineVariable -Name "${prefix}_Comment" -Value $commit.Comment
+        Set-PipelineVariable -Name "${prefix}_Description" -Value $commit.Description
+        Set-PipelineVariable -Name "${prefix}_AuthorEmail" -Value $commit.Author.Email
+        Set-PipelineVariable -Name "${prefix}_Date" -Value $commit.Author.Date
+
+        Write-Host ""
+        Write-Host "Commit #$index Details:"
+        Write-Host "  CommitId: $($commit.CommitId)"
+        Write-Host "  Comment: $($commit.Comment)"
+        Write-Host "  Description: $($commit.Description)"
+        Write-Host "  Author: $($commit.Author.Name) <$($commit.Author.Email)>"
+        Write-Host "  Author Date: $($commit.Author.Date)"
+
+        $index++
+      }
+    }
+
+    # Also set the latest (first) commit with simple names for convenience
+    $latestCommit = $commits[0]
+    Set-PipelineVariable -Name "LatestCommitId" -Value $latestCommit.CommitId -IsOutput
+    Set-PipelineVariable -Name "LatestCommitComment" -Value $latestCommit.Comment -IsOutput
+    Set-PipelineVariable -Name "LatestCommitDescription" -Value $latestCommit.Description -IsOutput
+    Set-PipelineVariable -Name "LatestCommitAuthorName" -Value $latestCommit.Author.Name -IsOutput
+    Set-PipelineVariable -Name "LatestCommitAuthorEmail" -Value $latestCommit.Author.Email -IsOutput
+    Set-PipelineVariable -Name "LatestCommitCommitterName" -Value $latestCommit.Committer.Name -IsOutput
+    Set-PipelineVariable -Name "LatestCommitCommitterEmail" -Value $latestCommit.Committer.Email -IsOutput
+
+    Set-PipelineVariable -Name "LatestCommitId" -Value $latestCommit.CommitId
+    Set-PipelineVariable -Name "LatestCommitComment" -Value $latestCommit.Comment
+    Set-PipelineVariable -Name "LatestCommitDescription" -Value $latestCommit.Description
+    Set-PipelineVariable -Name "LatestCommitAuthorName" -Value $latestCommit.Author.Name
+    Set-PipelineVariable -Name "LatestCommitAuthorEmail" -Value $latestCommit.Author.Email
+    Set-PipelineVariable -Name "LatestCommitCommitterName" -Value $latestCommit.Committer.Name
+    Set-PipelineVariable -Name "LatestCommitCommitterEmail" -Value $latestCommit.Committer.Email
+
+    Write-Host ""
+    Write-Host "Branch comparison completed successfully"
+    Write-Host "Base Branch: $env:BASE_BRANCH"
+    Write-Host "Target Branch: $env:TARGET_BRANCH"
+  displayName: 'Compare Branches: ${{ parameters.baseBranch }} vs ${{ parameters.targetBranch }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+    BASE_BRANCH: ${{ parameters.baseBranch }}
+    TARGET_BRANCH: ${{ parameters.targetBranch }}
+    ITEM_PATH: ${{ parameters.itemPath }}
+    INCLUDE_FULL_COMMENT: ${{ parameters.includeFullComment }}
+    OUTPUT_EACH_COMMIT: ${{ parameters.outputEachCommit }}

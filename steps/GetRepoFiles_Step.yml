@@ -1,0 +1,48 @@
+# =============================================================================
+# steps/GetRepoFiles_Step.yml
+# Template to download files from a directory in an Azure DevOps Git repository
+# =============================================================================
+
+parameters:
+- name: organization
+  type: string
+  default: 'contoso'
+- name: project
+  type: string
+  default: 'MyProject'
+- name: repository
+  type: string
+- name: path
+  type: string
+- name: outputDirectory
+  type: string
+- name: branch
+  type: string
+  default: 'main'
+- name: stepName
+  type: string
+  default: 'GetRepoFiles_Step'
+
+steps:
+
+- pwsh: |
+    Import-Module /ADOPipelineAPI/scripts/AzureDevOpsApi.psm1
+
+    $result = Get-RepoFiles `
+      -Organization "${{ parameters.organization }}" `
+      -Project "${{ parameters.project }}" `
+      -Repository "${{ parameters.repository }}" `
+      -Path "${{ parameters.path }}" `
+      -OutputDirectory "${{ parameters.outputDirectory }}" `
+      -Branch "${{ parameters.branch }}" `
+      -AccessToken $env:SYSTEM_ACCESSTOKEN
+
+    Set-PipelineVariable -Name "FileCount" -Value $result.FileCount -IsOutput
+    Set-PipelineVariable -Name "OutputDirectory" -Value "${{ parameters.outputDirectory }}" -IsOutput
+    Set-PipelineVariable -Name "Success" -Value $result.Success -IsOutput
+
+    Write-Host "Downloaded $($result.FileCount) files"
+  displayName: 'Download Repo Files: ${{ parameters.path }}'
+  name: ${{ parameters.stepName }}
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
